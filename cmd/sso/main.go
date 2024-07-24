@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -16,11 +17,12 @@ const (
 )
 
 func main() {
-	// TO Do: инициализировать объект конфига
+	ctx := context.Background()
+
+	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
 
 	cfg := config.MustLoad()
-
-	// TO Do: инициализировать логгер
 
 	log := setupLogger(cfg.Env)
 
@@ -28,21 +30,18 @@ func main() {
 
 	application := app.New(log, cfg.GRPC.Port, cfg.StoragePath, cfg.TokenTTl)
 
-	go application.GROCSrv.MustRun()
+	go func() {
+		application.GROCSrv.MustRun()
+	}()
 
-	// TO Do: инициализировать приложение (app)
-	// TO Do: запустить grpc сервер приложения
+	<-ctx.Done()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
-
-	sign := <-stop
-
-	log.Info("stopping application", slog.String("signal", sign.String()))
+	log.Info("stopping application", slog.String("signal", ctx.Err().Error()))
 
 	application.GROCSrv.Stop()
 
 	log.Info("application Stopped")
+
 }
 
 func setupLogger(env string) *slog.Logger {
